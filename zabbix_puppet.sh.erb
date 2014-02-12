@@ -1,0 +1,281 @@
+#!/bin/sh
+
+
+#Déclaration des fonctions
+
+#####################################################################
+#Fonction qui renvoie la clef API en fonction de l'user du front end#
+#####################################################################
+
+clefapi(){
+curl -i -X POST -H "Content-Type:application/json" -d "{\"jsonrpc\": \"2.0\",\"method\":\"user.authenticate\",\"params\":{\"user\":\"zabbixapi\",\"password\":\"57DAqJMJ\"},
+\"auth\": null,\"id\":0}" "http://${IPFRONTZABBIX}/zabbix/api_jsonrpc.php" |sed "s/,/\n/g" | grep "result" | cut -f2 -d":" | sed "s/\"//g"
+}
+
+##################################
+#fonction qui renvoie l'ID groupe#
+##################################
+
+idgroup(){
+curl -i -X GET -H "Content-Type: application/json-rpc" -d "{\"params\": {\"output\": \"extend\",\"filter\":{ \"name\": [ \"${1}\"]}}, \"jsonrpc\": \"2.0\", 
+\"method\": \"hostgroup.get\",\"auth\": \"${CLEAPI}\", \"id\": 1}" "http://${IPFRONTZABBIX}/api_jsonrpc.php" |sed "s/,/\n/g" | grep -w "groupid" | cut -f3 -d":"| sed "s/\"//g"
+}
+
+##########################################################################
+#fonction listing des hosts présent dans un groupe en fonction du GROUPID#
+##########################################################################
+
+hostlist(){
+curl -i -X GET -H "Content-Type: application/json-rpc" -d "{\"params\": {\"output\": [\"${1}\"],
+\"selectHosts\": \"extend\", \"filter\": {\"groupid\": [\"${1}\"]} }, \"jsonrpc\": \"2.0\", \"method\": \"hostgroup.get\",
+\"auth\": \"${CLEAPI}\", \"id\": 1}" "http://${IPFRONTZABBIX}/api_jsonrpc.php" | sed "s/,/\n/g" | grep -w "name" | cut -f2 -d":" | sed "s/\"//g"  > /tmp/${2}
+}
+
+##################################################################################
+#fonction listing des ID des hosts présent dans le groupe en fonction du GROUPEID#
+##################################################################################
+
+idlist(){
+curl -i -X GET -H "Content-Type: application/json-rpc" -d "{\"params\": {\"output\": [\"${1}\"],\"selectHosts\": \"extend\", \"filter\": {\"groupid\": [\"${1}\"]} },\"jsonrpc\": \"2.0\", 
+\"method\": \"hostgroup.get\",\"auth\": \"${CLEAPI}\", \"id\": 1}" "http://${IPFRONTZABBIX}/api_jsonrpc.php" | sed "s/,/\n/g" | grep -w "hostid" | cut -f2 -d":" | cut -f2 -d"]" | sed "s/\"//g" | sed "1~2d" > /tm$
+}
+
+#######################################################################################
+#fonction de test de la présence de l'host sur le bon front end par rapport a sa chain#
+#######################################################################################
+
+checkhost(){
+curl -XGET 172.50.0.100:5984/youactive_puppet/${1} | grep ${2} | wc -l
+}
+
+##############################################
+#Fonction de récupération des infos de l'host#
+##############################################
+
+infohost(){
+curl -XGET 172.50.0.100:5984/youactive_puppet/${1} | sed "s/,/\n/g" | grep ${2} | cut -f4 -d":" | sed "s/\"//g" | sed "s/\}//g"
+}
+
+###########################################################################################
+#Fonction qui check l existence du groupe sur le front end en fonction du groupe de l host#
+###########################################################################################
+
+checkgroup(){
+curl -i -X GET -H "Content-Type: application/json-rpc" -d "{\"params\": {\"output\": \"extend\",\"filter\":{ \"name\": [ \"${1}\"]}},
+\"jsonrpc\": \"2.0\",\"method\": \"hostgroup.get\", \"auth\": \"${CLEAPI}\", \"id\": 1}" "http://${IPFRONTZABBIX}/zabbix/api_jsonrpc.php" | grep -w "groupid" | wc -l
+}
+
+########################################################################
+#Fonction qui liste les groupes ou l host est présent dans le front end#
+########################################################################
+
+hostgrouplist(){
+curl -i -X GET -H "Content-Type: application/json-rpc" -d "{\"params\": {\"output\": [\"${1}\"], \"selectGroups\": \"extend\", \"filter\": {\"host\": [\"${2}\"]} },\"jsonrpc\": \"2.0\", 
+\"method\": \"host.get\", \"auth\": \"${CLEAPI}\", \"id\": 1}" "http://${IPFRONTZABBIX}/api_jsonrpc.php" | sed "s/,/\n/g" | grep -w "name" | cut -f2 -d":" | sed "s/\"//g" > /tmp/groupwhith${2}
+
+}
+
+############################################
+#Fonction qui delete  en fonction de son ID#
+############################################
+
+delete(){
+curl -i -X POST -H "Content-Type: application/json-rpc" -d "{\"jsonrpc\":\"2.0\", \"method\":\"${1}\", \"params\":[\"${2}\"],
+        \"auth\":\"${CLEAPI}\", \"id\":1}"  "http://${IPFRONTZABBIX}/api_jsonrpc.php"
+
+}
+
+############################################################################################
+#Fonction qui ajoute l host dans son groupe en fonction de l ID du groupe et l ID de l host#
+############################################################################################
+
+ajout(){
+curl -i -X POST -H "Content-Type: application/json-rpc" -d "{\"jsonrpc\":\"2.0\", \"method\":\"hostgroup.massadd\", \"params\":{\"groups\": [{\"groupid\": \"${1}\"}],
+                                \"hosts\": [{\"hostid\": \"${2}\"}]},\"auth\":\"${CLEAPI}\", \"id\":1}"  "http://${IPFRONTZABBIX}/api_jsonrpc.php"
+}
+
+###############################################################
+#Fonction qui test si le groupe est vide en fonction de son ID#
+###############################################################
+
+testvide(){
+curl -i -X GET -H "Content-Type: application/json-rpc" -d "{\"params\": {\"output\": [\"${1}\"],\"selectHosts\": \"extend\", \"filter\": {\"groupid\": [\"${1}\"]} },\"jsonrpc\": \"2.0\", \"method\": 
+\"hostgroup.get\",\"auth\": \"${CLEAPI}\", \"id\": 1}" "http://${IPFRONTZABBIX}/zabbix/api_jsonrpc.php" | sed "s/,/\n/g" | grep -w "name" | cut -f2 -d":" | sed "s/\"//g" |wc -l
+}
+
+##################################################
+#Fonction qui test si  un host est dans un groupe#
+##################################################
+
+testhost(){
+
+curl -i -X GET -H "Content-Type: application/json-rpc" -d "{\"params\": {\"output\": [\"${1}\"],\"selectHosts\": \"extend\", \"filter\": {\"groupid\": [\"${1}\"]} }, \"jsonrpc\": \"2.0\",
+ \"method\": \"hostgroup.get\", \"auth\": \"${CLEAPI}\", \"id\": 1}" "http://${IPFRONTZABBIX}/api_jsonrpc.php" | sed "s/,/\n/g" | grep -w "name" | cut -f2 -d":" | sed "s/\"//g" | grep -w "${2}" | wc -l
+
+}
+
+#########################################################################################
+#Fonction qui suprime l host d un groupe en fonction de l ID du groupe et l ID de l host#
+#########################################################################################
+deletehost(){
+curl -i -X GET -H "Content-Type: application/json-rpc" -d "{\"params\": {\"groupids\": [\"${1}\"], \"hostids\": [ \"${2}\"]}, \"jsonrpc\": \"2.0\",
+\"method\": \"hostgroup.massremove\",\"auth\": \"${CLEAPI}\", \"id\": 1}" "http://${IPFRONTZABBIX}/api_jsonrpc.php"
+
+}
+
+################################
+#Fonction qui crée un hostgroup#
+################################
+
+creategroup(){
+curl -i -X GET -H "Content-Type: application/json-rpc" -d "{\"jsonrpc\":\"2.0\", \"method\":\"hostgroup.create\", \"params\": {\"name\": \"${1}\"},
+\"auth\": \"${CLEAPI}\", \"id\": 0}" "http://${IPFRONTZABBIX}/api_jsonrpc.php"
+}
+
+##############################################
+# Declaration des viariables colorimetriques #
+##############################################
+
+VERT="\\033[1;32m"
+NORMAL="\\033[0;39m"
+ROUGE="\\033[1;31m"
+ROSE="\\033[1;35m"
+BLEU="\\033[1;34m"
+BLANC="\\033[0;02m"
+BLANCLAIR="\\033[1;08m"
+JAUNE="\\033[1;33m"
+CYAN="\\033[1;36m"
+
+# Declaration des variables locales
+IPFRONTZABBIX=<%= @ipFront %>
+CHAIN=<%= @chain %>
+GROUP=<%= @group %>
+
+CLEAPI=$(clefapi)
+
+echo "\n" "${VERT}""cle API ${CLEAPI}""${NORMAL}"
+
+GROUPID=$(idgroup "${GROUP}")
+
+echo "\n" "${VERT}""ID groupe discovered ${GROUPID}""${NORMAL}"
+
+hostlist "${GROUPID}" "hosts"
+
+idlist "${GROUPID}"
+
+while read line
+do
+        echo "\n" "${VERT}""Host = ${line}""${NORMAL}"
+
+        CHECKHOST=$(checkhost "${line}" "${CHAIN}")
+
+        echo "\n" "${VERT}""check de l'host = ${CHECKHOST}""${NORMAL}"
+
+        THEATERHOST=$(infohost "${line}" "theater")
+
+        echo "\n" "${VERT}""theater de l'host ${THEATERHOST}""${NORMAL}"
+
+        CHAINHOST=$(infohost "${line}" "chain")
+
+        echo "\n" "${VERT}""chain de l'host ${CHAINHOST}""${NORMAL}"
+
+        GROUPHOST=$(infohost "${CHAINHOST}.${THEATERHOST}" "sites")
+                echo "\n" "${VERT}""goupe de l'host ${GROUPHOST}""${NORMAL}"
+
+        CHECKGROUPEXIST=$(checkgroup "${GROUPHOST}")
+
+        echo "\n" "${VERT}""test groupe exist ${CHECKGROUPEXIST}""${NORMAL}"
+
+        HOSTIDLINE=`cat /tmp/hosts | grep -n "${line}" | cut -d":" -f1`
+
+        HOSTID=`cat /tmp/hostsid | sed -n "${HOSTIDLINE}p"`
+
+        echo "\n" "${VERT}""ID de l'host ${HOSTID}""${NORMAL}"  
+
+        HOST=${line}
+
+        hostgrouplist "${HOSTID}" "${line}"
+
+        if [ ${CHECKHOST} != 1  ]
+        then
+
+                delete "host.delete" "${HOSTID}"
+
+                if [ ${CHECKGROUPEXIST} -eq 1 ] #Si groupe exist
+                then #Alors
+
+                        GROUPHOSTID=$(idgroup "${GROUPHOST}")
+
+                        CHECKGROUPVIDE=$(testvide "${GROUPHOSTID}" "${line}")
+
+                        if [ ${CHECKGROUPVIDE} -eq 0 ] #Si groupe vide 
+                        then #Alors
+                                delete "hostgroup.delete" "${GROUPHOSTID}"
+                        else
+                                hostlist "${GROUPHOSTID}" "hostsingroupe"
+                        fi
+                fi
+        else
+                if [ ${CHECKGROUPEXIST} -eq 1 ] #Si groupe exist
+                then #Alors
+                        GROUPHOSTID=$(idgroup "${GROUPHOST}")
+
+                        CHECKHOSTINGROUP=$(testhost "${GROUPHOSTID}")
+
+                        if [ ${CHECKHOSTINGROUP} -eq 0 ] #Si host pas présent dans le groupe
+
+                         then #Alors
+
+                        ajout "${GROUPHOSTID}" "${HOSTID}"
+
+                                while read line
+
+                                do
+                                        if [ "${GROUPHOST}" != "${line}" ] && [ "${line}" != "Discovered hosts" ] && [ "${line}" != "Active_lip" ]
+                                        then
+
+                                                LINEID=$(idgroup "${line}")
+
+                                                deletehost "${LINEID}" "${HOSTID}"
+
+                                                CHECKVIDE=$(testvide "${LINEID}")
+
+                                                if [ ${CHECKVIDE} -eq 0 ]
+                                                then
+                                                        delete "hostgroup.delete" "${LINEID}"
+ 
+                                                fi
+                                        fi
+                                done < /tmp/groupwhith${HOST}
+                                     fi
+                else #Sinon
+
+                        creategroup "${GROUPHOST}"
+
+                        GROUPHOSTID=$(idgroup "${GROUPHOST}")
+
+                        while read line
+                                do
+                                if [ "${GROUPHOST}" != "${line}" ] && [ "${line}" != "Discovered hosts" ] && [ "${Line}" != "Active_lip" ]
+                                        then
+                                        LINEID=$(idgroup "${line}")
+
+                                        deletehost "${LINEID}" "${HOSTID}"
+
+                                        CHECKVIDE=$(testvide "${LINEID}")
+
+                                        if [ ${CHECKVIDE} -eq 0 ]
+
+                                                then
+                                                delete "hostgroup.delete" "${LINEID}"
+
+                                        fi
+                                fi
+                        done < /tmp/groupwhith${HOST}
+
+                        ajout "${GROUPHOSTID}" "${HOSTID}"
+
+                fi # Fin Si
+        fi
+done < /tmp/hosts
+

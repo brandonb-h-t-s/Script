@@ -1,0 +1,10 @@
+#!/bin/bash
+
+
+NEWLOCALTIME=`curl -XGET http://ip-api.com/line | sed -n 10p`
+LOCALTIME=`head --line=1 /etc/timezone`
+
+if [ ${NEWLOCALTIME} != ${LOCALTIME} ]; then
+        echo ${NEWLOCALTIME} > /etc/timezone
+        dpkg-reconfigure --frontend noninteractive tzdata
+fi

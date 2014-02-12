@@ -1,0 +1,91 @@
+#!/bin/sh
+
+#Declaration des variables
+
+TMPFILES="/tmp"
+
+#Déclaration des fonctions
+
+
+################
+#fonction init #
+################
+
+init(){
+cd /usr/share/puppet-dashboard
+}
+
+
+############################
+#fonction listing des lips #
+############################
+
+liplist(){
+curl -XGET "http://172.50.0.20:3000/nodes/search?search_params%5B%5D%5Bfact%5D=active_model&search_params%5B%5D%5Bcomparator%5D=eq&search_params%5B%5D%5Bvalue%5D=lip" | grep "hosts.active.ht"| cut -f2 -d">"|cut $
+}
+
+
+##################
+#Fonction listing#
+##################
+
+listing(){
+cd /usr/share/puppet-dashboard && rake RAILS_ENV=production ${1} ${2}| sed '1d' > ${TMPFILES}/${3}
+}
+
+########################
+#Fonction create groupe#
+########################
+
+create(){
+cd /usr/share/puppet-dashboard && rake RAILS_ENV=production nodegroup:add name="${1}"
+}
+
+#############################
+#Fonction ajout dans  groupe#
+#############################
+
+ajout(){
+cd /usr/share/puppet-dashboard && rake RAILS_ENV=production node:groups name="${1}" groups="${2}"
+}
+
+
+####################################################################
+
+init
+liplist
+echo "listing des nodes"
+listing "nodegroup:list" "" "groupe"
+echo "listing des groupes"
+
+while read line
+do
+        echo "entrer dans le while"
+
+        cd /usr/share/puppet-dashboard && rake RAILS_ENV=production node:listgroups name="${line}"| sed '1d' > ${TMPFILES}/groupe${line}
+        CHAIN=`curl -XGET 172.50.0.100:5984/youactive_puppet/${line} | sed "s/,/\n/g" | grep "chain" | cut -f4 -d":" | sed "s/\"//g" | sed "s/\}//g"`
+        echo "${CHAIN}"
+
+        if [ "${CHAIN}" = "hts" ]
+        then
+                GROUPNODE=`curl -XGET 172.50.0.100:5984/youactive_puppet/${line} | sed "s/,/\n/g" | grep "sites" | cut -f4 -d":" | sed "s/\"//g" | sed "s/\}//g"`
+
+        else
+                THEATER=`curl -XGET 172.50.0.100:5984/youactive_puppet/${line} | sed "s/,/\n/g" | grep "theater" | cut -f4 -d":" | sed "s/\"//g" | sed "s/\}//g"`
+                GROUPNODE=`curl -XGET 172.50.0.100:5984/youactive_puppet/${CHAIN}.${THEATER} | sed "s/,/\n/g" | grep "sites" | cut -f4 -d":" | sed "s/\"//g" | sed "s/\}//g"`
+        fi
+        echo "${GROUPNODE}"
+        TESTGROUP=`grep -w "${GROUPNODE}" ${TMPFILES}/groupe${line} | wc -l`
+        GROUPEXIST=`grep -w "${GROUPNODE}" ${TMPFILES}/groupe | wc -l`
+        if [ ${GROUPEXIST} -eq 0 ]
+        then
+                create "${GROUPNODE}"
+                listing "nodegroup:list" "" "groupe"
+                ajout "${line}" "${GROUPNODE}"
+        else
+                if [ ${TESTGROUP} -eq 0 ] 
+                then
+                        ajout "${line}" "${GROUPNODE}"
+                fi
+        fi
+done < ${TMPFILES}/node
