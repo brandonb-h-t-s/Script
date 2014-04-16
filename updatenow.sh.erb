@@ -1,0 +1,27 @@
+#!/bin/bash
+
+echo "Content-type: text/html"
+echo ""
+
+echo '<html>'
+echo '<head>'
+echo '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">'
+echo '<title>Update NOW</title>'
+echo '</head>'
+echo '<body  text="#000000" text-align="center"><FONT COLOR="#FF0000"><center>The player is currently updating its settings and contents and will readjust itself when the update is completed</center></font>'
+echo '</body>'
+echo '</html>'
+
+
+
+CLEAPI=`curl --silent -i -X POST -H "Content-Type:application/json" -d "{\"jsonrpc\": \"2.0\",\"method\":\"user.authenticate\",\"params\":{\"user\":\"zabbixapi\",
+\"password\":\"57DAqJMJ\"},\"auth\": null,\"id\":0}" "http://<%= @ipFront %>/api_jsonrpc.php" | sed "s/,/\n/g" | grep "result" | cut -f2 -d":" | sed "s/\"//g"`
+
+HOSTID=`echo $QUERY_STRING`
+
+SCRIPTID=`curl --silent -i -X GET -H "Content-Type: application/json-rpc" -d "{\"jsonrpc\": \"2.0\",\"method\":\"script.getscriptsbyhosts\",\"params\": [\"${HOSTID}\"],
+\"auth\": \"${CLEAPI}\", \"id\": 1}" "http://<%= @ipFront %>/api_jsonrpc.php" | sed  "s/{/\n/g" |grep -w "UpdateNOW" | cut -f2 -d":" | cut -f1 -d","| sed "s/\"//g"`
+
+SCRIPT=`curl --silent -i -X GET -H "Content-Type: application/json-rpc" -d "{\"jsonrpc\": \"2.0\",\"method\":\"script.execute\",\"params\": {\"scriptid\" : \"${SCRIPTID}\",
+\"hostid\" : \"${HOSTID}\"},\"auth\": \"${CLEAPI}\", \"id\": 1}" "http://<%= @ipFront %>/api_jsonrpc.php"`
+
